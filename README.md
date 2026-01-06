@@ -102,6 +102,164 @@
   - Use JQL queries (`--jql`) for complex filtering and bulk operations
   - Use `--web` flag when user needs visual context
 
+  ## Testing Guidelines
+
+  ### Core Philosophy
+
+  **Test contracts, not implementation.** Tests verify public APIs and observable behavior from the consumer's perspective. Implementation details are internal concerns that should remain flexible.
+
+  **Key Principles:**
+  - Test what the code does, not how it does it
+  - Write tests as if you're using the component
+  - Focus on inputs, outputs, and side effects
+  - Avoid coupling tests to internal structure
+
+  ### Test Types
+
+  #### Unit Tests
+  Test public methods and their contracts in isolation.
+
+  **Focus:**
+  - Inputs/outputs for public methods
+  - Edge cases and error conditions
+  - Business logic correctness
+  - Mock external dependencies
+
+  **Example:**
+  ```kotlin
+  @Test
+  fun `should calculate total compensation when rates provided`() {
+      val result = compensationCalculator.calculate(baseRate = 15.0, hours = 40.0)
+      assertThat(result).isEqualTo(600.0)
+  }
+  ```
+
+  #### Integration Tests
+  Test component interactions with real infrastructure.
+
+  **Focus:**
+  - Database persistence and retrieval
+  - Redis caching behavior
+  - External API interactions
+  - Cross-component data flow
+
+  **Setup:**
+  - Extend `IntegrationTest` base class when available
+  - Use Testcontainers for PostgreSQL, Redis, Kafka
+  - Use WireMock for HTTP APIs
+  - Test actual persistence, not mocked repositories
+
+  **Example:**
+  ```kotlin
+  @SpringBootTest
+  @Testcontainers
+  class PlacementRepositoryIntegrationTest : IntegrationTest() {
+      @Test
+      fun `should persist and retrieve placement`() {
+          val saved = repository.save(placement)
+          val retrieved = repository.findById(saved.id)
+          assertThat(retrieved).isPresent
+      }
+  }
+  ```
+
+  #### Contract Tests
+  Verify API contracts and data formats.
+
+  **Focus:**
+  - Request/response formats
+  - HTTP status codes
+  - Error responses
+  - DTO validation
+
+  ### What to Test
+
+  - **Public API surface**: Methods, functions, REST endpoints
+  - **Observable behavior**: Return values, thrown exceptions, side effects
+  - **Edge cases**: Null inputs, empty collections, boundary conditions
+  - **Error handling**: Expected exceptions, error messages
+  - **Data transformations**: Input → processing → output
+  - **Integration points**: Cross-service communication, database operations
+  - **Contract compliance**: DTO structure, API response format
+
+  ### What NOT to Test
+
+  - **Private methods**: Test through public API instead
+  - **Implementation details**: Internal state, private classes, helper methods
+  - **Framework behavior**: Spring auto-configuration, JPA query generation
+  - **Third-party libraries**: Trust library functionality
+  - **Simple getters/setters**: Unless they contain logic
+  - **Constructors**: Unless they perform validation
+
+  **Example of what to avoid:**
+  ```kotlin
+  // Bad: Testing internal implementation
+  @Test
+  fun `should call private helper method`() {
+      service.publicMethod()
+      verify { service["privateHelper"]() }  // AVOID
+  }
+
+  // Good: Test observable behavior
+  @Test
+  fun `should return formatted result when processing data`() {
+      val result = service.publicMethod(input)
+      assertThat(result).isEqualTo(expectedOutput)
+  }
+  ```
+
+  ### Kotlin/Spring Boot Patterns
+
+  **MockK Usage:**
+  - Use MockK for mocking (`io.mockk:mockk`)
+  - Mock external dependencies, not the class under test
+  - Use `every { }` for stubbing
+  - Use `verify { }` sparingly (prefer testing outcomes)
+  - Use `slot<>()` to capture arguments when needed
+  - Clear mocks between tests with `clearAllMocks()`
+
+  **Spring Test Annotations:**
+  - `@SpringBootTest`: Full application context
+  - `@WebMvcTest`: Controller layer tests only
+  - `@DataJpaTest`: Repository layer tests only
+  - `@MockBean`: Replace Spring beans with mocks
+
+  **Example:**
+  ```kotlin
+  @Test
+  fun `should fetch worker data when valid ID provided`() {
+      val workerId = UUID.randomUUID()
+      val expectedWorker = Worker(id = workerId, name = "John")
+
+      every { workerClient.getWorker(workerId) } returns expectedWorker
+
+      val result = workerService.fetchWorker(workerId)
+
+      assertThat(result.name).isEqualTo("John")
+      // Note: No verify() needed - we tested the outcome
+  }
+  ```
+
+  ### Test Organization
+
+  - **Structure**: Mirror main source structure in test directory
+  - **Naming**: Use descriptive names: `should <expected behavior> when <condition>`
+  - **Grouping**: Group related tests in nested classes
+  - **Setup**: Use `@BeforeEach` for common setup, keep tests independent
+  - **Cleanup**: Clean up test data appropriately in integration tests
+
+  ### Testing Checklist
+
+  Before submitting code, verify:
+  - [ ] Tests verify public API behavior, not internal implementation
+  - [ ] Tests are written from consumer's perspective
+  - [ ] External dependencies are mocked, not internal classes
+  - [ ] Integration tests use real infrastructure (Testcontainers)
+  - [ ] Test names clearly describe expected behavior
+  - [ ] Edge cases and error conditions are covered
+  - [ ] Tests are independent and can run in any order
+  - [ ] No implementation details leaked into test assertions
+
   ## Response Framework
   1. Analyze the underlying problem before accepting solutions
   2. Identify constraints and hidden assumptions
